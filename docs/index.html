@@ -272,14 +272,17 @@
             });
         }
 
-        // FIXED: Gráfico interactivo con brush - increased size
+        // FIXED: Gráfico interactivo con brush - reads from CSV file
         function createBrushChart() {
-            const width = 180;  // Increased from 175
+            const width = 220;  // Increased width for more space
             const height = 300;
+            const margin = { top: 20, right: 20, bottom: 20, left: 20 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
             
             const container = d3.select('#brushChart');
             
-            // Create two side-by-side SVGs
+            // Create two side-by-side SVGs with more space
             const svg1 = container.append('svg')
                 .attr('width', width)
                 .attr('height', height)
@@ -295,46 +298,99 @@
                 .style('border', '1px solid #667eea')
                 .style('border-radius', '5px');
 
-            // Generate sample data with better distribution
-            const data = salesData.map((d, i) => ({ 
-                A: 30 + i * 25, 
-                B: 50 + (d.sales / 1000), 
-                id: i 
-            }));
+            // Add groups with margins
+            const g1 = svg1.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+            const g2 = svg2.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
 
-            const sc1 = d3.scaleLinear()
-                .domain([0, 10, 50])
-                .range(["lime", "yellow", "red"]);
-            const sc2 = d3.scaleLinear()
-                .domain([0, 10, 50])
-                .range(["lime", "yellow", "blue"]);
+            // Try to load CSV data, fallback to sample data if file not found
+            d3.csv('dense.csv').then(function(csvData) {
+                processData(csvData);
+            }).catch(function(error) {
+                console.log('CSV file not found, using sample data');
+                // Fallback to generated sample data if CSV not available
+                const sampleData = generateSampleData();
+                processData(sampleData);
+            });
 
-            const cs1 = drawCircles(svg1, data, d => +d.A, d => +d.B, sc1);
-            const cs2 = drawCircles(svg2, data, d => +d.A, d => +d.B, sc2);
+            function generateSampleData() {
+                // Generate more dense sample data
+                const data = [];
+                for (let i = 0; i < 50; i++) {
+                    data.push({
+                        A: Math.random() * 100 + 20,
+                        B: Math.random() * 80 + 30,
+                        id: i
+                    });
+                }
+                return data;
+            }
 
-            // Install handlers on svg1
-            svg1.call(installHandlers, data, cs1, cs2, sc1, sc2);
+            function processData(rawData) {
+                // Convert string values to numbers and ensure we have A and B columns
+                const data = rawData.map((d, i) => ({
+                    A: +d.A || +d.x || Math.random() * 100 + 20,
+                    B: +d.B || +d.y || Math.random() * 80 + 30,
+                    id: i
+                }));
 
-            function drawCircles(svg, data, accX, accY, sc) {
+                // Create scales based on data extent
+                const xExtent = d3.extent(data, d => d.A);
+                const yExtent = d3.extent(data, d => d.B);
+                
+                // Add padding to the domains
+                const xPadding = (xExtent[1] - xExtent[0]) * 0.1;
+                const yPadding = (yExtent[1] - yExtent[0]) * 0.1;
+                
+                const xScale = d3.scaleLinear()
+                    .domain([xExtent[0] - xPadding, xExtent[1] + xPadding])
+                    .range([0, chartWidth]);
+                
+                const yScale = d3.scaleLinear()
+                    .domain([yExtent[0] - yPadding, yExtent[1] + yPadding])
+                    .range([chartHeight, 0]);
+
+                const sc1 = d3.scaleLinear()
+                    .domain([0, 10, 50])
+                    .range(["lime", "yellow", "red"]);
+                const sc2 = d3.scaleLinear()
+                    .domain([0, 10, 50])
+                    .range(["lime", "yellow", "blue"]);
+
+                const cs1 = drawCircles(g1, data, d => xScale(d.A), d => yScale(d.B), sc1);
+                const cs2 = drawCircles(g2, data, d => xScale(d.A), d => yScale(d.B), sc2);
+
+                // Install handlers on svg1
+                svg1.call(installHandlers, data, cs1, cs2, sc1, sc2, xScale, yScale);
+            }
+
+            function drawCircles(container, data, accX, accY, sc) {
                 const color = sc(Infinity);
-                return svg.selectAll("circle")
+                return container.selectAll("circle")
                     .data(data)
                     .enter()
                     .append("circle")
-                    .attr("r", 8)  // Increased radius for better visibility
+                    .attr("r", 4)  // Smaller radius for dense data
                     .attr("cx", accX)
                     .attr("cy", accY)
                     .attr("fill", color)
-                    .attr("fill-opacity", 0.4);
+                    .attr("fill-opacity", 0.6)
+                    .attr("stroke", "white")
+                    .attr("stroke-width", 0.5);
             }
 
-            function installHandlers(svg, data, cs1, cs2, sc1, sc2) {
+            function installHandlers(svg, data, cs1, cs2, sc1, sc2, xScale, yScale) {
                 svg.style("cursor", "crosshair")
                     .on("mousemove", function(event) {
                         const pt = d3.pointer(event, svg.node());
+                        // Adjust point for margin
+                        const adjustedPt = [pt[0] - margin.left, pt[1] - margin.top];
+                        
                         cs1.attr("fill", function(d, i) {
-                            const r = Math.hypot(pt[0] - d3.select(this).attr("cx"),
-                                               pt[1] - d3.select(this).attr("cy"));
+                            const cx = +d3.select(this).attr("cx");
+                            const cy = +d3.select(this).attr("cy");
+                            const r = Math.hypot(adjustedPt[0] - cx, adjustedPt[1] - cy);
                             data[i]["r"] = r;
                             return sc1(r);
                         });
