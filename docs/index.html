@@ -1,1 +1,498 @@
 
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard D3.js Interactivo</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .dashboard {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: #2c3e50;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            font-weight: 300;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            transform: translateY(0);
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease;
+        }
+
+        .chart-container:hover {
+            transform: translateY(-2px);
+        }
+
+        .chart-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 1000;
+        }
+
+        .coords-text {
+            font-family: 'Segoe UI', monospace;
+            font-size: 14px;
+            font-weight: bold;
+            fill: #2c3e50;
+            text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
+        }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .dashboard {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <h1>📊 Dashboard Interactivo</h1>
+            <p>Visualización de datos con D3.js</p>
+        </div>
+
+        <div class="stats-grid" id="stats"></div>
+
+        <div class="charts-grid">
+            <div class="chart-container">
+                <div class="chart-title">📍 Rastreador de Coordenadas</div>
+                <div id="coordsChart"></div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">🖌️ Gráfico con Brush</div>
+                <div id="brushChart" style="display: flex;"></div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">👆 Drag and Drop</div>
+                <div id="dragDropChart"></div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">⏱️ Animación Escalonada</div>
+                <div id="staggerChart"></div>
+            </div>
+
+            <div class="chart-container full-width">
+                <div class="chart-title">🌀 Curvas de Lissajous</div>
+                <div id="lissajousChart"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+
+    <script>
+        // Datos de ejemplo
+        const salesData = [
+            { month: 'Ene', sales: 45000, users: 1200 },
+            { month: 'Feb', sales: 52000, users: 1350 },
+            { month: 'Mar', sales: 48000, users: 1280 },
+            { month: 'Abr', sales: 61000, users: 1450 },
+            { month: 'May', sales: 55000, users: 1380 },
+            { month: 'Jun', sales: 67000, users: 1520 }
+        ];
+
+        // Crear tarjetas de estadísticas
+        function createStatsCards() {
+            const stats = [
+                { label: 'Interacciones', value: '1.2K', icon: '🖱️' },
+                { label: 'Elementos', value: '47', icon: '🔘' },
+                { label: 'Tiempo', value: '3.4m', icon: '⏱️' },
+                { label: 'Eventos', value: '256', icon: '📊' }
+            ];
+
+            const statsContainer = d3.select('#stats');
+            
+            const cards = statsContainer.selectAll('.stat-card')
+                .data(stats)
+                .enter()
+                .append('div')
+                .attr('class', 'stat-card')
+                .style('opacity', 0)
+                .style('transform', 'translateY(20px)');
+
+            cards.append('div')
+                .attr('class', 'stat-value')
+                .text(d => d.value);
+
+            cards.append('div')
+                .attr('class', 'stat-label')
+                .text(d => `${d.icon} ${d.label}`);
+
+            // Animación de entrada
+            cards.transition()
+                .duration(800)
+                .delay((d, i) => i * 100)
+                .style('opacity', 1)
+                .style('transform', 'translateY(0)');
+        }
+
+        // Rastreador de coordenadas
+        function createCoordsChart() {
+            const width = 350;
+            const height = 300;
+
+            const svg = d3.select('#coordsChart')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height)
+                .style('background', 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)')
+                .style('border', '2px solid #667eea')
+                .style('border-radius', '10px')
+                .style('cursor', 'crosshair');
+
+            const txt = svg.append('text')
+                .attr('class', 'coords-text')
+                .attr('font-family', 'Segoe UI, monospace')
+                .attr('font-size', '14px')
+                .attr('font-weight', 'bold')
+                .attr('fill', '#2c3e50')
+                .style('text-shadow', '1px 1px 2px rgba(255, 255, 255, 0.8)');
+
+            svg.on('mousemove', function() {
+                const [x, y] = d3.mouse(this);
+                txt.attr('x', 18 + x)
+                   .attr('y', 6 + y)
+                   .text(`(${Math.round(x)}, ${Math.round(y)})`);
+            })
+            .on('mouseleave', function() {
+                txt.text('');
+            });
+        }
+
+        // Gráfico interactivo con brush
+        function createBrushChart() {
+            const width = 350;
+            const height = 300;
+            
+            const container = d3.select('#brushChart');
+            
+            const svg1 = container.append('svg')
+                .attr('width', width/2)
+                .attr('height', height)
+                .style('background', 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)')
+                .style('border', '1px solid #667eea')
+                .style('border-radius', '5px')
+                .style('margin-right', '10px');
+                
+            const svg2 = container.append('svg')
+                .attr('width', width/2)
+                .attr('height', height)
+                .style('background', 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)')
+                .style('border', '1px solid #667eea')
+                .style('border-radius', '5px');
+
+            // Datos de ejemplo
+            const data = salesData.map((d, i) => ({ A: i * 30, B: d.sales / 200, id: i }));
+
+            const sc1 = d3.scaleLinear()
+                .domain([0, 10, 50])
+                .range(["lime", "yellow", "red"]);
+            const sc2 = d3.scaleLinear()
+                .domain([0, 10, 50])
+                .range(["lime", "yellow", "blue"]);
+
+            const cs1 = drawCircles(svg1, data, d => +d.A, d => +d.B, sc1);
+            const cs2 = drawCircles(svg2, data, d => +d.A, d => +d.B, sc2);
+
+            installHandlers(svg1, data, cs1, cs2, sc1, sc2);
+
+            function drawCircles(svg, data, accX, accY, sc) {
+                const color = sc(Infinity);
+                return svg.selectAll("circle")
+                    .data(data)
+                    .enter()
+                    .append("circle")
+                    .attr("r", 5)
+                    .attr("cx", accX)
+                    .attr("cy", accY)
+                    .attr("fill", color)
+                    .attr("fill-opacity", 0.4);
+            }
+
+            function installHandlers(svg, data, cs1, cs2, sc1, sc2) {
+                svg.style("cursor", "crosshair")
+                    .on("mousemove", function() {
+                        const pt = d3.mouse(svg.node());
+                        cs1.attr("fill", function(d, i) {
+                            const r = Math.hypot(pt[0] - d3.select(this).attr("cx"),
+                                               pt[1] - d3.select(this).attr("cy"));
+                            data[i]["r"] = r;
+                            return sc1(r);
+                        });
+                        cs2.attr("fill", (d, i) => sc2(data[i]["r"]));
+                    })
+                    .on("mouseleave", function() {
+                        cs1.attr("fill", sc1(Infinity));
+                        cs2.attr("fill", sc2(Infinity));
+                    });
+            }
+        }
+
+        // Drag and Drop
+        function createDragDropChart() {
+            const width = 350;
+            const height = 300;
+
+            const svg = d3.select('#dragDropChart')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height)
+                .style('background', 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)')
+                .style('border', '2px solid #667eea')
+                .style('border-radius', '10px');
+
+            // Crear círculos
+            const circles = svg.selectAll("circle")
+                .data([
+                    {x: 100, y: 150, color: "#667eea"},
+                    {x: 175, y: 150, color: "#764ba2"},
+                    {x: 250, y: 150, color: "#f093fb"}
+                ])
+                .enter()
+                .append("circle")
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y)
+                .attr("r", 20)
+                .attr("fill", d => d.color)
+                .style("cursor", "grab");
+
+            let widget = undefined, originalColor = undefined;
+
+            const drag = d3.drag()
+                .on("start", function(d) {
+                    originalColor = d3.select(this).attr("fill");
+                    widget = d3.select(this).attr("fill", "lime").style("cursor", "grabbing");
+                })
+                .on("drag", function() {
+                    const [x, y] = d3.mouse(svg.node());
+                    widget.attr("cx", x).attr("cy", y);
+                })
+                .on("end", function() {
+                    widget.attr("fill", originalColor).style("cursor", "grab");
+                    widget = undefined;
+                });
+
+            circles.call(drag);
+        }
+
+        // Animación escalonada
+        function createStaggerChart() {
+            const width = 350;
+            const height = 300;
+            const margin = { top: 20, right: 30, bottom: 40, left: 30 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+
+            let ds1 = [2, 1, 3, 5, 7, 8, 9, 9, 9, 8, 7, 5, 3, 1, 2];
+            let ds2 = [8, 9, 8, 7, 5, 3, 2, 1, 2, 3, 5, 7, 8, 9, 8];
+            const n = ds1.length;
+            const mx = d3.max(ds1.concat(ds2));
+
+            const svg = d3.select('#staggerChart')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height)
+                .style('background', 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)')
+                .style('border', '2px solid #667eea')
+                .style('border-radius', '10px')
+                .style('cursor', 'pointer');
+
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            const scX = d3.scaleLinear().domain([0, n]).range([0, chartWidth]);
+            const scY = d3.scaleLinear().domain([0, mx]).range([chartHeight, 0]);
+
+            g.selectAll("line")
+                .data(ds1)
+                .enter()
+                .append("line")
+                .attr("stroke", "#667eea")
+                .attr("stroke-width", 15)
+                .attr("x1", (d, i) => scX(i) + scX.bandwidth?.() / 2 || scX(i))
+                .attr("y1", scY(0))
+                .attr("x2", (d, i) => scX(i) + scX.bandwidth?.() / 2 || scX(i))
+                .attr("y2", d => scY(d));
+
+            svg.on("click", function() {
+                [ds1, ds2] = [ds2, ds1];
+                g.selectAll("line")
+                    .data(ds1)
+                    .transition()
+                    .duration(1000)
+                    .delay((d, i) => 100 * i)
+                    .attr("y2", d => scY(d));
+            });
+        }
+
+        // Curvas de Lissajous
+        function createLissajousChart() {
+            const width = 350;
+            const height = 300;
+
+            const svg = d3.select('#lissajousChart')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height)
+                .style('background', 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)')
+                .style('border', '2px solid #667eea')
+                .style('border-radius', '10px');
+
+            const a = 1.9, b = 3.2;
+            let phi, omega = 2 * Math.PI / 10000;
+
+            let crrX = width/2 + 100, crrY = height/2 + 0;
+            let prvX = crrX, prvY = crrY;
+
+            const timer = d3.timer(function(t) {
+                phi = omega * t;
+
+                crrX = width/2 + 80 * Math.cos(a * phi);
+                crrY = height/2 + 80 * Math.sin(b * phi);
+
+                svg.selectAll("line")
+                    .each(function() { this.bogus_opacity *= 0.99; })
+                    .attr("stroke-opacity", function() { return this.bogus_opacity; })
+                    .filter(function() { return this.bogus_opacity < 0.05; })
+                    .remove();
+
+                svg.append("line")
+                    .each(function() { this.bogus_opacity = 1.0; })
+                    .attr("x1", prvX).attr("y1", prvY)
+                    .attr("x2", crrX).attr("y2", crrY)
+                    .attr("stroke", "#667eea")
+                    .attr("stroke-width", 2);
+
+                prvX = crrX;
+                prvY = crrY;
+
+                if (t > 60000) {
+                    timer.stop();
+                }
+            });
+        }
+
+        // Inicializar dashboard
+        function initDashboard() {
+            createStatsCards();
+            createCoordsChart();
+            createBrushChart();
+            createDragDropChart();
+            createStaggerChart();
+            createLissajousChart();
+        }
+
+        // Ejecutar cuando el DOM esté listo
+        document.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+</body>
+</html>
+
