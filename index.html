@@ -181,11 +181,10 @@
 
         <div class="stats-grid" id="stats"></div>
 
-        <div class="charts-grid">
-            <div class="chart-container">
-                <div class="chart-title">📈 Ventas por Mes</div>
-                <div id="barChart"></div>
-            </div>
+        <div class="chart-container">
+            <div class="chart-title">🎯 Rastreador de Coordenadas</div>
+            <div id="coordsChart"></div>
+        </div>
 
             <div class="chart-container">
                 <div class="chart-title">🥧 Distribución por Categoría</div>
@@ -272,76 +271,37 @@
         }
 
         // Gráfico de barras
-        function createBarChart() {
-            const margin = { top: 20, right: 30, bottom: 40, left: 60 };
-            const width = 400 - margin.left - margin.right;
-            const height = 300 - margin.top - margin.bottom;
-
-            const svg = d3.select('#barChart')
+         // Rastreador de coordenadas
+        function createCoordsChart() {
+            const width = 350;
+            const height = 300;
+        
+            const svg = d3.select('#coordsChart')
                 .append('svg')
-                .attr('width', width + margin.left + margin.right)
-                .attr('height', height + margin.top + margin.bottom);
-
-            const g = svg.append('g')
-                .attr('transform', `translate(${margin.left},${margin.top})`);
-
-            const x = d3.scaleBand()
-                .domain(salesData.map(d => d.month))
-                .range([0, width])
-                .padding(0.2);
-
-            const y = d3.scaleLinear()
-                .domain([0, d3.max(salesData, d => d.sales)])
-                .range([height, 0]);
-
-            // Ejes
-            g.append('g')
-                .attr('class', 'axis')
-                .attr('transform', `translate(0,${height})`)
-                .call(d3.axisBottom(x));
-
-            g.append('g')
-                .attr('class', 'axis')
-                .call(d3.axisLeft(y).tickFormat(d => `$${d/1000}K`));
-
-            // Barras
-            const bars = g.selectAll('.bar')
-                .data(salesData)
-                .enter()
-                .append('rect')
-                .attr('class', 'bar')
-                .attr('x', d => x(d.month))
-                .attr('width', x.bandwidth())
-                .attr('y', height)
-                .attr('height', 0)
-                .attr('fill', 'url(#barGradient)');
-
-            // Gradiente para las barras
-            const defs = svg.append('defs');
-            const gradient = defs.append('linearGradient')
-                .attr('id', 'barGradient')
-                .attr('gradientUnits', 'userSpaceOnUse')
-                .attr('x1', 0).attr('y1', height)
-                .attr('x2', 0).attr('y2', 0);
-
-            gradient.append('stop')
-                .attr('offset', '0%')
-                .attr('stop-color', '#667eea');
-
-            gradient.append('stop')
-                .attr('offset', '100%')
-                .attr('stop-color', '#764ba2');
-
-            // Animación y eventos
-            bars.on('mouseover', function(event, d) {
-                    showTooltip(event, `<strong>${d.month}</strong><br>Ventas: $${d.sales.toLocaleString()}`);
-                })
-                .on('mouseout', hideTooltip)
-                .transition()
-                .duration(800)
-                .delay((d, i) => i * 100)
-                .attr('y', d => y(d.sales))
-                .attr('height', d => height - y(d.sales));
+                .attr('width', width)
+                .attr('height', height)
+                .style('background', 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)')
+                .style('border', '2px solid #667eea')
+                .style('border-radius', '10px')
+                .style('cursor', 'crosshair');
+        
+            const txt = svg.append('text')
+                .attr('class', 'coords-text')
+                .attr('font-family', 'Segoe UI, monospace')
+                .attr('font-size', '14px')
+                .attr('font-weight', 'bold')
+                .attr('fill', '#2c3e50')
+                .style('text-shadow', '1px 1px 2px rgba(255, 255, 255, 0.8)');
+        
+            svg.on('mousemove', function() {
+                const [x, y] = d3.mouse(this);
+                txt.attr('x', 18 + x)
+                   .attr('y', 6 + y)
+                   .text(`(${Math.round(x)}, ${Math.round(y)})`);
+            })
+            .on('mouseleave', function() {
+                txt.text('');
+            });
         }
 
         // Gráfico circular (pie chart)
@@ -530,7 +490,7 @@
         // Inicializar dashboard
         function initDashboard() {
             createStatsCards();
-            createBarChart();
+            createCoordsChart();
             createPieChart();
             createLineChart();
         }
