@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream de Datos con D3.js</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .container {
+            background: white;
+            padding: 15px;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            flex-shrink: 0;
+            margin-bottom: 15px;
+        }
+        
+        .chart {
+            background: #fafafa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            flex: 1;
+            min-height: 0;
+        }
+        
+        .line {
+            fill: none;
+            stroke: #2196F3;
+            stroke-width: 2;
+        }
+        
+        .axis {
+            color: #666;
+        }
+        
+        .grid line {
+            stroke: #e0e0e0;
+            stroke-dasharray: 3,3;
+        }
+        
+        .grid path {
+            stroke-width: 0;
+        }
+        
+        .controls {
+            margin-bottom: 15px;
+        }
+        
+        button {
+            margin: 5px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .start-btn {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .stop-btn {
+            background: #f44336;
+            color: white;
+        }
+        
+        .clear-btn {
+            background: #FF9800;
+            color: white;
+        }
+        
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            color: #666;
+            flex-wrap: wrap;
+        }
+
+        h1 {
+            margin: 0 0 15px 0;
+            font-size: 24px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Visualización de Stream de Datos en Tiempo Real</h1>
+            
+            <div class="controls">
+                <button class="start-btn" onclick="startStream()">Iniciar Stream</button>
+                <button class="stop-btn" onclick="stopStream()">Detener Stream</button>
+                <button class="clear-btn" onclick="clearData()">Limpiar Datos</button>
+            </div>
+            
+            <div class="stats">
+                <div>Puntos: <span id="point-count">0</span></div>
+                <div>Último valor: <span id="last-value">-</span></div>
+                <div>Promedio: <span id="average">-</span></div>
+            </div>
+        </div>
+        
+        <div id="chart" class="chart"></div>
+    </div>
+
+    <script>
+        // Configuración del gráfico
+        const margin = {top: 20, right: 30, bottom: 40, left: 50};
+        const maxDataPoints = 50; // Máximo de puntos a mostrar
+        
+        // Datos del stream
+        let data = [];
+        let streamInterval;
+        let isStreaming = false;
+        
+        // Variables para dimensiones
+        let width, height, svg, g, xScale, yScale, line, xAxis, yAxis, xAxisG, yAxisG, xGrid, yGrid, path;
+        
+        // Función para obtener dimensiones de la ventana
+        function getChartDimensions() {
+            const chartContainer = document.getElementById('chart');
+            const containerRect = chartContainer.getBoundingClientRect();
+            return {
+                width: containerRect.width - margin.left - margin.right,
+                height: containerRect.height - margin.top - margin.bottom
+            };
+        }
+        
+        // Función para inicializar el gráfico
+        function initChart() {
+            // Limpiar el contenido anterior
+            d3.select("#chart").selectAll("*").remove();
+            
+            const dimensions = getChartDimensions();
+            width = dimensions.width;
+            height = dimensions.height;
+            
+            // Crear SVG
+            svg = d3.select("#chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom);
+                
+            g = svg.append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            // Escalas
+            xScale = d3.scaleTime()
+                .range([0, width]);
+                
+            yScale = d3.scaleLinear()
+                .range([height, 0]);
+            
+            // Generador de línea
+            line = d3.line()
+                .x(d => xScale(d.time))
+                .y(d => yScale(d.value))
+                .curve(d3.curveMonotoneX);
+            
+            // Ejes
+            xAxis = d3.axisBottom(xScale)
+                .tickFormat(d3.timeFormat("%H:%M:%S"));
+                
+            yAxis = d3.axisLeft(yScale);
+            
+            // Agregar ejes al SVG
+            xAxisG = g.append("g")
+                .attr("class", "axis")
+                .attr("transform", `translate(0,${height})`);
+                
+            yAxisG = g.append("g")
+                .attr("class", "axis");
+            
+            // Grid
+            xGrid = g.append("g")
+                .attr("class", "grid")
+                .attr("transform", `translate(0,${height})`);
+                
+            yGrid = g.append("g")
+                .attr("class", "grid");
+            
+            // Path para la línea
+            path = g.append("path")
+                .attr("class", "line");
+        }
+        
+        // Función para generar datos aleatorios
+        function generateDataPoint() {
+            const now = new Date();
+            const value = Math.random() * 100 + Math.sin(now.getTime() / 1000) * 20 + 50;
+            return {
+                time: now,
+                value: value
+            };
+        }
+        
+        // Función para actualizar el gráfico
+        function updateChart() {
+            if (!data.length) return;
+            
+            // Actualizar dominios de las escalas
+            xScale.domain(d3.extent(data, d => d.time));
+            yScale.domain(d3.extent(data, d => d.value));
+            
+            // Actualizar ejes
+            xAxisG.transition()
+                .duration(500)
+                .call(xAxis);
+                
+            yAxisG.transition()
+                .duration(500)
+                .call(yAxis);
+            
+            // Actualizar grid
+            xGrid.transition()
+                .duration(500)
+                .call(d3.axisBottom(xScale)
+                    .tickSize(-height)
+                    .tickFormat("")
+                );
+                
+            yGrid.transition()
+                .duration(500)
+                .call(d3.axisLeft(yScale)
+                    .tickSize(-width)
+                    .tickFormat("")
+                );
+            
+            // Actualizar línea
+            path.datum(data)
+                .transition()
+                .duration(500)
+                .attr("d", line);
+            
+            // Actualizar estadísticas
+            updateStats();
+        }
+        
+        // Función para actualizar estadísticas
+        function updateStats() {
+            document.getElementById('point-count').textContent = data.length;
+            
+            if (data.length > 0) {
+                const lastValue = data[data.length - 1].value;
+                const average = data.reduce((sum, d) => sum + d.value, 0) / data.length;
+                
+                document.getElementById('last-value').textContent = lastValue.toFixed(2);
+                document.getElementById('average').textContent = average.toFixed(2);
+            }
+        }
+        
+        // Función para agregar un nuevo punto de datos
+        function addDataPoint() {
+            const newPoint = generateDataPoint();
+            data.push(newPoint);
+            
+            // Mantener solo los últimos N puntos
+            if (data.length > maxDataPoints) {
+                data.shift();
+            }
+            
+            updateChart();
+        }
+        
+        // Funciones de control
+        function startStream() {
+            if (!isStreaming) {
+                isStreaming = true;
+                streamInterval = setInterval(addDataPoint, 1000); // Cada segundo
+                document.querySelector('.start-btn').style.opacity = '0.5';
+                document.querySelector('.stop-btn').style.opacity = '1';
+            }
+        }
+        
+        function stopStream() {
+            if (isStreaming) {
+                isStreaming = false;
+                clearInterval(streamInterval);
+                document.querySelector('.start-btn').style.opacity = '1';
+                document.querySelector('.stop-btn').style.opacity = '0.5';
+            }
+        }
+        
+        function clearData() {
+            stopStream();
+            data = [];
+            updateChart();
+            
+            // Resetear estadísticas
+            document.getElementById('point-count').textContent = '0';
+            document.getElementById('last-value').textContent = '-';
+            document.getElementById('average').textContent = '-';
+        }
+        
+        // Función para manejar el redimensionado de la ventana
+        function handleResize() {
+            initChart();
+            if (data.length > 0) {
+                updateChart();
+            }
+        }
+        
+        // Inicializar
+        window.addEventListener('load', () => {
+            initChart();
+            
+            // Inicializar con algunos datos
+            for (let i = 0; i < 10; i++) {
+                setTimeout(() => {
+                    addDataPoint();
+                }, i * 100);
+            }
+            
+            // Configurar estado inicial de botones
+            document.querySelector('.stop-btn').style.opacity = '0.5';
+        });
+        
+        // Agregar listener para redimensionado
+        window.addEventListener('resize', handleResize);
+    </script>
+</body>
+</html>
